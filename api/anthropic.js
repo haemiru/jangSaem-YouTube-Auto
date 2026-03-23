@@ -2,13 +2,11 @@ export default async function handler(req, res) {
   const path = req.url.replace(/^\/api\/anthropic/, '') || '/';
   const target = `https://api.anthropic.com${path}`;
 
-  const headers = { ...req.headers };
-  // Inject API key
-  headers['x-api-key'] = process.env.ANTHROPIC_API_KEY;
-  // Clean up headers that shouldn't be forwarded
-  delete headers.host;
-  delete headers.origin;
-  delete headers.referer;
+  const headers = {
+    'content-type': 'application/json',
+    'anthropic-version': req.headers['anthropic-version'] || '2023-06-01',
+    'x-api-key': process.env.ANTHROPIC_API_KEY,
+  };
 
   try {
     const response = await fetch(target, {
@@ -17,7 +15,6 @@ export default async function handler(req, res) {
       body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
     });
 
-    // Forward response headers
     const contentType = response.headers.get('content-type');
     if (contentType) res.setHeader('content-type', contentType);
 
