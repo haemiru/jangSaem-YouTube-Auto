@@ -23,18 +23,44 @@ export default function ScriptPanel({ globalState, updateState, onNext }) {
 
   const parseJSON = (text) => {
     try {
-      const match = text.match(/\{[\s\S]*\}/);
-      return match ? JSON.parse(match[0]) : null;
-    } catch {
+      // 1. Remove <thinking>...</thinking> blocks
+      let cleaned = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+      
+      // 2. Try to extract from markdown code blocks first
+      const codeBlockMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        cleaned = codeBlockMatch[1].trim();
+      }
+      
+      // 3. Try direct JSON parse
+      try {
+        return JSON.parse(cleaned);
+      } catch {}
+      
+      // 4. Find the outermost balanced { ... }
+      const startIdx = cleaned.indexOf('{');
+      if (startIdx === -1) return null;
+      
+      let depth = 0;
+      let endIdx = -1;
+      for (let i = startIdx; i < cleaned.length; i++) {
+        if (cleaned[i] === '{') depth++;
+        else if (cleaned[i] === '}') {
+          depth--;
+          if (depth === 0) { endIdx = i; break; }
+        }
+      }
+      
+      if (endIdx === -1) return null;
+      const jsonStr = cleaned.substring(startIdx, endIdx + 1);
+      return JSON.parse(jsonStr);
+    } catch (err) {
+      console.error('JSON 파싱 실패. 원본 응답:', text.substring(0, 500));
       return null;
     }
   };
 
   const generateAll = async () => {
-    if (!settings.anthropicKey) {
-      setError('API 키가 설정되지 않았습니다. 설정창을 확인해주세요.');
-      return;
-    }
     setError('');
     setCurrentStep(1);
     setStreamText('');
@@ -87,7 +113,7 @@ export default function ScriptPanel({ globalState, updateState, onNext }) {
 JSON만 출력.`;
 
       chatHistory.push({ role: "user", content: hookPrompt });
-      const hookResponseText = await runClaudeStream(chatHistory, plan.model, settings.anthropicKey, (chunk) => {
+      const hookResponseText = await runClaudeStream(chatHistory, plan.model, null, (chunk) => {
         setStreamText(prev => prev + chunk);
       });
       chatHistory.push({ role: "assistant", content: hookResponseText });
@@ -131,7 +157,7 @@ JSON 출력:
 JSON만 출력.`;
 
       chatHistory.push({ role: "user", content: sectionPrompt });
-      const sectionResponseText = await runClaudeStream(chatHistory, plan.model, settings.anthropicKey, (chunk) => {
+      const sectionResponseText = await runClaudeStream(chatHistory, plan.model, null, (chunk) => {
         setStreamText(prev => prev + chunk);
       });
       chatHistory.push({ role: "assistant", content: sectionResponseText });
@@ -179,7 +205,7 @@ JSON 출력:
 JSON만 출력.`;
 
       chatHistory.push({ role: "user", content: titlePrompt });
-      const titleResponseText = await runClaudeStream(chatHistory, plan.model, settings.anthropicKey, (chunk) => {
+      const titleResponseText = await runClaudeStream(chatHistory, plan.model, null, (chunk) => {
         setStreamText(prev => prev + chunk);
       });
 
@@ -253,6 +279,9 @@ JSON만 출력.`;
           <Play fill="white" size={18} /> 대본 생성 시작하기
         </button>
         {error && <div style={{ color: 'red', marginTop: '1rem' }}>{error}</div>}
+        <button className="btn-secondary" onClick={onNext} style={{ marginTop: '1rem', opacity: 0.7 }}>
+          건너뛰고 미디어 생성 →
+        </button>
       </div>
     );
   }
@@ -417,16 +446,14 @@ JSON만 출력.`;
 // --- API Helpers ---
 
 // Stream fetching handler matching Anthropic Docs
-async function runClaudeStream(messages, model, apiKey, onChunk) {
+async function runClaudeStream(messages, model, _apiKey, onChunk) {
   const systemPrompt = `당신은 jjangsaem.com의 유튜브 콘텐츠 전문가입니다. 피지오 후각 연구소 소속으로 발달장애 아동 및 가족을 위한 뇌과학 근거 중심의 전문적이고 따뜻한 어조로 작성합니다. 항상 JSON 형식으로 응답할 수 있도록 노력합니다. (<thinking> 태그는 허용)`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('/api/anthropic/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerously-allow-browser': 'true'
+      'content-type': 'application/json'
     },
     body: JSON.stringify({
       model: model || "claude-haiku-4-5-20251001",

@@ -5,16 +5,12 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
   const [progress, setProgress] = useState({ step: 0, text: '', error: '' });
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const { plan, settings, benchmark } = globalState;
+  const { plan, benchmark } = globalState;
 
   // If already has results, show them.
   const hasResults = benchmark.channels.length > 0 || benchmark.tagPool.length > 0;
 
   const startBenchmark = async () => {
-    if (!settings.anthropicKey || !settings.youtubeKey) {
-      setProgress({ step: 0, text: '', error: 'API 키가 설정되지 않았습니다. 우측 상단 설정창을 확인해주세요.' });
-      return;
-    }
     if (!plan.topic) {
       setProgress({ step: 0, text: '', error: '기획 탭에서 주제를 먼저 입력해주세요.' });
       return;
@@ -25,25 +21,25 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
 
     try {
       // 1. Keyword Extraction
-      const keywords = await fetchKeywords(plan.topic, settings.anthropicKey);
+      const keywords = await fetchKeywords(plan.topic);
       if (!keywords || keywords.length === 0) throw new Error('키워드 추출 실패');
 
       setProgress({ step: 2, text: '📺 유사 채널 수집 중...', error: '' });
 
       // 2. Collect Channels
-      const { channels, popularVideos, allTags } = await collectChannels(keywords, settings.youtubeKey);
-      
+      const { channels, popularVideos, allTags } = await collectChannels(keywords);
+
       setProgress({ step: 3, text: '🖼️ 썸네일 패턴 분석 중...', error: '' });
 
       // 3. Analyze Thumbnails
       const thumbnails = popularVideos.map(v => v.thumbnail).slice(0, 10); // Max 10
-      const thumbnailPatterns = await analyzeThumbnails(thumbnails, settings.anthropicKey);
+      const thumbnailPatterns = await analyzeThumbnails(thumbnails);
 
       setProgress({ step: 4, text: '📊 제목 공식 추출 중...', error: '' });
 
       // 4. Analyze Titles
       const titles = popularVideos.map(v => v.title).slice(0, 20);
-      const titleFormulas = await analyzeTitles(titles, settings.anthropicKey);
+      const titleFormulas = await analyzeTitles(titles);
 
       setProgress({ step: 5, text: '✅ 벤치마킹 완료', error: '' });
 
@@ -105,6 +101,14 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
               <div style={{ width: `${(progress.step / 5) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s' }} />
             </div>
           )}
+        </div>
+      )}
+
+      {!hasResults && !isProcessing && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+          <button className="btn-secondary" onClick={onNext} style={{ opacity: 0.7 }}>
+            건너뛰고 대본 작성 →
+          </button>
         </div>
       )}
 
@@ -218,14 +222,12 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
 
 // --- API Helpers ---
 
-async function fetchKeywords(topic, apiKey) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+async function fetchKeywords(topic) {
+  const res = await fetch('/api/anthropic/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerously-allow-browser': 'true'
+      'content-type': 'application/json'
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
@@ -248,12 +250,12 @@ async function fetchKeywords(topic, apiKey) {
   return ["육아팁", "신생아", "터미타임", "아기", "발달"];
 }
 
-async function collectChannels(keywords, ytKey) {
+async function collectChannels(keywords) {
   let channelIds = new Set();
-  
-  // 1. Search for channels via keywords
+
+  // 1. Search for channels via keywords (routed through server-side proxy)
   for (const kw of keywords.slice(0, 3)) { // max 3 to save quota
-    const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(kw)}&maxResults=10&key=${ytKey}`);
+    const searchRes = await fetch(`/api/youtube/search?part=snippet&type=video&q=${encodeURIComponent(kw)}&maxResults=10`);
     if(searchRes.ok) {
       const data = await searchRes.json();
       data.items?.forEach(item => channelIds.add(item.snippet.channelId));
@@ -264,7 +266,7 @@ async function collectChannels(keywords, ytKey) {
   const cIds = Array.from(channelIds).slice(0, 20); // API max 50, use 20
   if (cIds.length === 0) return { channels: [], popularVideos: [], allTags: [] };
 
-  const chRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${cIds.join(',')}&key=${ytKey}`);
+  const chRes = await fetch(`/api/youtube/channels?part=statistics,snippet&id=${cIds.join(',')}`);
   const chData = await chRes.json();
   
   const validChannels = [];
@@ -293,12 +295,12 @@ async function collectChannels(keywords, ytKey) {
   let allTags = [];
 
   for (const ch of finalChannels) {
-    const vRes = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${ch.channelId}&order=viewCount&maxResults=10&type=video&key=${ytKey}`);
+    const vRes = await fetch(`/api/youtube/search?part=snippet&channelId=${ch.channelId}&order=viewCount&maxResults=10&type=video`);
     if (vRes.ok) {
       const vData = await vRes.json();
       const vIds = vData.items?.map(i => i.id.videoId) || [];
       if (vIds.length > 0) {
-        const dRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${vIds.join(',')}&key=${ytKey}`);
+        const dRes = await fetch(`/api/youtube/videos?part=snippet&id=${vIds.join(',')}`);
         const dData = await dRes.json();
         
         dData.items?.forEach(vd => {
@@ -334,7 +336,7 @@ async function collectChannels(keywords, ytKey) {
   return { channels: finalChannels, popularVideos, allTags };
 }
 
-async function analyzeThumbnails(thumbnails, apiKey) {
+async function analyzeThumbnails(thumbnails) {
   try {
     const content = thumbnails.map(url => ({
       type: "image",
@@ -345,13 +347,11 @@ async function analyzeThumbnails(thumbnails, apiKey) {
       text: "이 유튜브 썸네일들을 분석해서 다음을 JSON으로 출력해줘.\n분석 항목:\n1. dominantColors: 가장 많이 쓰인 색상 조합 top3 (헥스코드 배열)\n2. textPattern: 텍스트 글자수 범위, 위치(상/중/하), 폰트 굵기를 포함한 문자열 요약\n3. emotionType: 등장 인물 표정 유형 (공감/놀람/걱정/희망/없음) 비율\n4. layoutType: 인물중심/텍스트중심/인포그래픽 비율\n5. commonWords: 텍스트에서 자주 등장한 단어 top10 배열\nJSON 형식으로만 출력, 다른 텍스트 없이."
     });
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('/api/anthropic/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerously-allow-browser': 'true'
+        'content-type': 'application/json'
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
@@ -363,8 +363,7 @@ async function analyzeThumbnails(thumbnails, apiKey) {
     if(!res.ok) throw new Error('Vision API Error');
     const data = await res.json();
     const text = data.content[0].text;
-    const match = text.match(/\{.*\}/s);
-    return match ? JSON.parse(match[0]) : null;
+    return robustParseJSON(text);
   } catch (err) {
     console.warn("Thumbnail Analysis fallback", err);
     // Fallback Mock Data Since Claude Vision base64/URL might have strict CORS or URL issue
@@ -378,15 +377,13 @@ async function analyzeThumbnails(thumbnails, apiKey) {
   }
 }
 
-async function analyzeTitles(titles, apiKey) {
+async function analyzeTitles(titles) {
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('/api/anthropic/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerously-allow-browser': 'true'
+        'content-type': 'application/json'
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
@@ -401,8 +398,7 @@ async function analyzeTitles(titles, apiKey) {
     if(!res.ok) throw new Error('Title Analysis Error');
     const data = await res.json();
     const text = data.content[0].text;
-    const match = text.match(/\{.*\}/s);
-    return match ? JSON.parse(match[0]) : null;
+    return robustParseJSON(text);
   } catch (err) {
     console.warn("Title Analysis fallback", err);
     return {
@@ -414,5 +410,26 @@ async function analyzeTitles(titles, apiKey) {
       triggerWords: ['무조건', '충격', '비법', '초보', '실수'],
       numberUsage: '기간(개월 수, 일 수) 및 짧은 수행 시간(5분, 3가지)을 주로 사용하여 실천 장벽을 낮춤'
     };
+  }
+}
+
+function robustParseJSON(text) {
+  try {
+    let cleaned = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    const codeBlockMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+    if (codeBlockMatch) cleaned = codeBlockMatch[1].trim();
+    try { return JSON.parse(cleaned); } catch {}
+    const startIdx = cleaned.indexOf('{');
+    if (startIdx === -1) return null;
+    let depth = 0, endIdx = -1;
+    for (let i = startIdx; i < cleaned.length; i++) {
+      if (cleaned[i] === '{') depth++;
+      else if (cleaned[i] === '}') { depth--; if (depth === 0) { endIdx = i; break; } }
+    }
+    if (endIdx === -1) return null;
+    return JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+  } catch (err) {
+    console.error('robustParseJSON 실패:', text.substring(0, 300));
+    return null;
   }
 }
