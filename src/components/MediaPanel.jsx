@@ -35,11 +35,12 @@ async function generateImageWithGemini(prompt, retries = 3) {
       }
 
       const data = await res.json();
+      console.log('Gemini API response:', JSON.stringify(data).substring(0, 500));
       const parts = data.candidates?.[0]?.content?.parts;
-      if (!parts) throw new Error('응답에 콘텐츠가 없습니다');
+      if (!parts) throw new Error('응답에 콘텐츠가 없습니다: ' + JSON.stringify(data).substring(0, 300));
 
       const imagePart = parts.find(p => p.inlineData);
-      if (!imagePart) throw new Error('이미지가 생성되지 않았습니다');
+      if (!imagePart) throw new Error('이미지가 생성되지 않았습니다: ' + JSON.stringify(parts.map(p => Object.keys(p))));
 
       const { mimeType, data: base64Data } = imagePart.inlineData;
       return `data:${mimeType};base64,${base64Data}`;
