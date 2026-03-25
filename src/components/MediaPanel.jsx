@@ -93,7 +93,10 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
     const suffix = COMMON_SUFFIX + aspectSuffix;
 
     const items = [];
-    items.push({ id: 'intro', label: '오프닝', prompt: `Opening title background for: ${script.hook}.${suffix}`, status: 'idle', url: null });
+    const introPrompt = script.intro_image_prompt
+      ? `${script.intro_image_prompt}${suffix}`
+      : `Opening title background for: ${script.hook}.${suffix}`;
+    items.push({ id: 'intro', label: '오프닝', prompt: introPrompt, status: 'idle', url: null });
 
     script.sections?.forEach((sec, idx) => {
       items.push({ id: `section_${idx}`, label: `섹션${idx+1}`, prompt: `${sec.image_prompt}${suffix}`, status: 'idle', url: null });
@@ -108,7 +111,10 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
       items.push({ id: 'thumb_b', label: '썸네일 B', prompt: thumbPrompt + ' Different angle and composition.', status: 'idle', url: null });
     }
 
-    items.push({ id: 'outro', label: '엔딩', prompt: `Clean outro background with jjangsaem.com text placeholder.${suffix}`, status: 'idle', url: null });
+    const outroPrompt = script.outro_image_prompt
+      ? `${script.outro_image_prompt}${suffix}`
+      : `Clean outro background with jjangsaem.com text placeholder.${suffix}`;
+    items.push({ id: 'outro', label: '엔딩', prompt: outroPrompt, status: 'idle', url: null });
 
     setQueue(items);
   }, [script, benchmark, isShorts]);

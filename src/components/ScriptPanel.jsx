@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Play, CheckCircle2, ChevronDown, ChevronUp, Image as ImageIcon, RefreshCw, Type, Loader2, ArrowRight } from 'lucide-react';
+import { FileText, Play, CheckCircle2, ChevronDown, ChevronUp, Image as ImageIcon, RefreshCw, Type, Loader2, ArrowRight, Copy, Check } from 'lucide-react';
 
 export default function ScriptPanel({ globalState, updateState, onNext }) {
   const { plan, benchmark, settings, script: globalScript } = globalState;
@@ -10,6 +10,15 @@ export default function ScriptPanel({ globalState, updateState, onNext }) {
   
   const [showHookCot, setShowHookCot] = useState(false);
   const [openPromptIdx, setOpenPromptIdx] = useState(null);
+  const [showIntroPrompt, setShowIntroPrompt] = useState(false);
+  const [showOutroPrompt, setShowOutroPrompt] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const copyPrompt = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1500);
+  };
   const streamEndRef = useRef(null);
 
   // If already generated and we aren't currently generating, show the results
@@ -164,14 +173,15 @@ JSON만 출력.`;
 
 JSON 출력:
 {
+  "intro_image_prompt": "오프닝 배경 이미지 생성 프롬프트 (영어, 훅 내용을 시각화)",
   "sections": [
     {
       "id": 1,
       "title": "섹션 제목",
       "script": "읽을 대본 전문",
       "duration_sec": 30,
-      "image_prompt": "이 섹션용 Antigravity 이미지 생성 프롬프트 (영어, 한국인 등장)
-- 전체 스크립트 중 ${plan.ebookName ? `[${plan.ebookName}] 연계 전자책의 핵심 노하우(${plan.ebookSummary.substring(0, 100)}...)를 자연스럽게 녹여냄` : '전문적인 노하우를 자연스럽게 녹여냄'}
+      "image_prompt": "이 섹션용 이미지 생성 프롬프트 (영어, 한국인 등장)
+- ${plan.ebookName ? `[${plan.ebookName}] 연계 전자책의 핵심 노하우를 자연스럽게 녹여냄` : '전문적인 노하우를 자연스럽게 녹여냄'}
 - 핵심 메시지 요약 (1문장)",
       "key_message": "핵심 한 줄 요약"
     }
@@ -180,7 +190,8 @@ JSON 출력:
     "text": "CTA 대본",
     "ebook_mention": "전자책 언급 문구",
     "duration_sec": 15
-  }
+  },
+  "outro_image_prompt": "엔딩 배경 이미지 생성 프롬프트 (영어, 깔끔한 아웃트로)"
 }
 JSON만 출력.`;
 
@@ -234,6 +245,8 @@ JSON만 출력. 다른 텍스트 절대 금지.`;
         cot_log: hookResult.cot_log,
         hook: hookResult.final_hook.text,
         bridge: hookResult.bridge,
+        intro_image_prompt: sectionResult.intro_image_prompt || '',
+        outro_image_prompt: sectionResult.outro_image_prompt || '',
         sections: sectionResult.sections || [],
         cta: sectionResult.cta || {},
         titleSuggestions: titleResult.title_candidates || [],
@@ -356,6 +369,34 @@ JSON만 출력. 다른 텍스트 절대 금지.`;
         </div>
       </div>
 
+      {/* 오프닝 이미지 프롬프트 */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem', backgroundColor: '#f0f9ff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '1.125rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            🎬 오프닝 이미지
+          </h3>
+          <button className="btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setShowIntroPrompt(!showIntroPrompt)}>
+            <ImageIcon size={14}/> {showIntroPrompt ? '프롬프트 닫기' : '프롬프트 보기'}
+          </button>
+        </div>
+        {showIntroPrompt && (
+          <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>오프닝 이미지 생성 프롬프트</label>
+              <button onClick={() => copyPrompt(globalScript.intro_image_prompt || '', 'intro')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: copiedId === 'intro' ? '#16a34a' : 'var(--primary)', padding: '0.125rem 0.25rem' }}>
+                {copiedId === 'intro' ? <><Check size={13}/> 복사됨</> : <><Copy size={13}/> 복사</>}
+              </button>
+            </div>
+            <textarea
+              className="form-control"
+              style={{ minHeight: '80px', fontSize: '0.8125rem', lineHeight: '1.5' }}
+              value={globalScript.intro_image_prompt || ''}
+              onChange={(e) => updateState('script', { ...globalScript, intro_image_prompt: e.target.value })}
+            />
+          </div>
+        )}
+      </div>
+
       {/* 섹션 카드 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <h3 style={{ fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -376,7 +417,12 @@ JSON만 출력. 다른 텍스트 절대 금지.`;
             </div>
             {openPromptIdx === idx && (
               <div style={{ marginBottom: '0.75rem', padding: '0.75rem', backgroundColor: 'var(--gray-100)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem', display: 'block' }}>이미지 생성 프롬프트</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>이미지 생성 프롬프트</label>
+                  <button onClick={() => copyPrompt(sec.image_prompt || '', `section_${idx}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: copiedId === `section_${idx}` ? '#16a34a' : 'var(--primary)', padding: '0.125rem 0.25rem' }}>
+                    {copiedId === `section_${idx}` ? <><Check size={13}/> 복사됨</> : <><Copy size={13}/> 복사</>}
+                  </button>
+                </div>
                 <textarea
                   className="form-control"
                   style={{ minHeight: '80px', fontSize: '0.8125rem', lineHeight: '1.5' }}
@@ -401,6 +447,34 @@ JSON만 출력. 다른 텍스트 절대 금지.`;
             <h4 style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--primary)' }}>CTA 및 아웃트로</h4>
             <p style={{ whiteSpace: 'pre-wrap', marginBottom: '0.5rem' }}>{globalScript.cta.text}</p>
             <p style={{ fontSize: '0.875rem', color: 'var(--primary)' }}>📢 전자책 연계: {globalScript.cta.ebook_mention}</p>
+          </div>
+        )}
+      </div>
+
+      {/* 엔딩 이미지 프롬프트 */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem', backgroundColor: '#f0f9ff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '1.125rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            🎬 엔딩 이미지
+          </h3>
+          <button className="btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setShowOutroPrompt(!showOutroPrompt)}>
+            <ImageIcon size={14}/> {showOutroPrompt ? '프롬프트 닫기' : '프롬프트 보기'}
+          </button>
+        </div>
+        {showOutroPrompt && (
+          <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>엔딩 이미지 생성 프롬프트</label>
+              <button onClick={() => copyPrompt(globalScript.outro_image_prompt || '', 'outro')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: copiedId === 'outro' ? '#16a34a' : 'var(--primary)', padding: '0.125rem 0.25rem' }}>
+                {copiedId === 'outro' ? <><Check size={13}/> 복사됨</> : <><Copy size={13}/> 복사</>}
+              </button>
+            </div>
+            <textarea
+              className="form-control"
+              style={{ minHeight: '80px', fontSize: '0.8125rem', lineHeight: '1.5' }}
+              value={globalScript.outro_image_prompt || ''}
+              onChange={(e) => updateState('script', { ...globalScript, outro_image_prompt: e.target.value })}
+            />
           </div>
         )}
       </div>
