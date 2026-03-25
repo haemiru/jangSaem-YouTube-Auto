@@ -226,6 +226,16 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
   const isAllCompleted = completedCount === queue.length && queue.length > 0;
   const hasResults = completedCount > 0;
 
+  // Auto-build timeline when all images are complete (covers upload-only flow)
+  useEffect(() => {
+    if (isAllCompleted && timeline.length === 0) {
+      const autoTimeline = queue
+        .filter(q => q.status === 'done' && q.id !== 'thumb_a' && q.id !== 'thumb_b')
+        .map(q => ({ id: q.id, label: q.label, url: q.url, duration: q.id.includes('section') ? 15 : 5 }));
+      if (autoTimeline.length > 0) setTimeline(autoTimeline);
+    }
+  }, [isAllCompleted, queue]);
+
   const moveTimelineItem = (idx, dir) => {
     const newTl = [...timeline];
     if (dir === 'up' && idx > 0) {
@@ -363,7 +373,8 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
 
       {hasResults && (
         <>
-          {/* 2. Thumbnail Editor */}
+          {/* 2. Thumbnail Editor (일반 영상만) */}
+          {!isShorts && (
           <div style={{ padding: '1.5rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
             <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Type size={18} color="var(--primary)" /> 썸네일 합성 (A/B 테스트 설정)
@@ -435,6 +446,7 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
               </div>
             </div>
           </div>
+          )}
 
           {/* 3. Setup Timeline */}
           {timeline.length > 0 && (
