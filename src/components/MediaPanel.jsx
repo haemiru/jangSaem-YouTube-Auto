@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Image as ImageIcon, RotateCw, Edit3, Settings2, ArrowRight, ArrowUp, ArrowDown, Type, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Image as ImageIcon, RotateCw, Edit3, Settings2, ArrowRight, ArrowUp, ArrowDown, Type, AlertCircle, StopCircle } from 'lucide-react';
 
 const COMMON_SUFFIX = ", Korean subjects, warm and professional style, clean background, high quality, bright lighting, suitable for educational YouTube content";
 
-const GEMINI_MODEL = 'gemini-3.1-flash-image-preview';
+const GEMINI_MODEL = 'gemini-3-pro-image-preview';
 const DELAY_BETWEEN_REQUESTS_MS = 3000;
 
 async function generateImageWithGemini(prompt, retries = 3) {
@@ -19,6 +19,9 @@ async function generateImageWithGemini(prompt, retries = 3) {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             responseModalities: ['IMAGE', 'TEXT'],
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
           },
         }),
       });
@@ -56,12 +59,14 @@ async function generateImageWithGemini(prompt, retries = 3) {
 }
 
 export default function MediaPanel({ globalState, updateState, onNext }) {
-  const { script, benchmark } = globalState;
+  const { plan, script, benchmark } = globalState;
+  const isShorts = plan?.format?.includes('쇼츠');
 
   // Items to generate
   const [queue, setQueue] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState('');
+  const stopRef = useRef(false);
 
   // Thumbnail overlay settings
   const [thumbSettings, setThumbSettings] = useState({
@@ -81,31 +86,48 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
   useEffect(() => {
     if (!script.hook) return;
 
+    const aspectSuffix = isShorts ? ', vertical 9:16 portrait aspect ratio, mobile-optimized' : '';
+    const suffix = COMMON_SUFFIX + aspectSuffix;
+
     const items = [];
-    items.push({ id: 'intro', label: '오프닝', prompt: `Opening title background for: ${script.hook}. ${COMMON_SUFFIX}`, status: 'idle', url: null });
+    items.push({ id: 'intro', label: '오프닝', prompt: `Opening title background for: ${script.hook}.${suffix}`, status: 'idle', url: null });
 
     script.sections?.forEach((sec, idx) => {
-      items.push({ id: `section_${idx}`, label: `섹션${idx+1}`, prompt: `${sec.image_prompt}${COMMON_SUFFIX}`, status: 'idle', url: null });
+      items.push({ id: `section_${idx}`, label: `섹션${idx+1}`, prompt: `${sec.image_prompt}${suffix}`, status: 'idle', url: null });
     });
 
-    // Thumbnails A & B
-    const domColors = benchmark?.thumbnailPatterns?.dominantColors?.join(', ') || 'warm tones';
-    const thumbPrompt = `Korean mother with contrasting emotions (worry/hope) expression, ${domColors} background, child visible in background. ${COMMON_SUFFIX}`;
+    // Thumbnails — skip for Shorts
+    if (!isShorts) {
+      const domColors = benchmark?.thumbnailPatterns?.dominantColors?.join(', ') || 'warm tones';
+      const thumbPrompt = `Korean mother with contrasting emotions (worry/hope) expression, ${domColors} background, child visible in background.${suffix}`;
 
-    items.push({ id: 'thumb_a', label: '썸네일 A', prompt: thumbPrompt, status: 'idle', url: null });
-    items.push({ id: 'thumb_b', label: '썸네일 B', prompt: thumbPrompt + ' Different angle and composition.', status: 'idle', url: null });
+      items.push({ id: 'thumb_a', label: '썸네일 A', prompt: thumbPrompt, status: 'idle', url: null });
+      items.push({ id: 'thumb_b', label: '썸네일 B', prompt: thumbPrompt + ' Different angle and composition.', status: 'idle', url: null });
+    }
 
-    items.push({ id: 'outro', label: '엔딩', prompt: `Clean outro background with jjangsaem.com text placeholder. ${COMMON_SUFFIX}`, status: 'idle', url: null });
+    items.push({ id: 'outro', label: '엔딩', prompt: `Clean outro background with jjangsaem.com text placeholder.${suffix}`, status: 'idle', url: null });
 
     setQueue(items);
-  }, [script, benchmark]);
+  }, [script, benchmark, isShorts]);
+
+  const stopGeneration = () => {
+    stopRef.current = true;
+  };
 
   const generateImages = async () => {
     setIsGenerating(true);
     setGenError('');
+    stopRef.current = false;
     const newQueue = [...queue];
 
     for (let i = 0; i < newQueue.length; i++) {
+      if (stopRef.current) {
+        // Mark remaining generating items back to idle
+        newQueue.forEach(q => { if (q.status === 'generating') q.status = 'idle'; });
+        setQueue([...newQueue]);
+        break;
+      }
+
       // Skip already completed items
       if (newQueue[i].status === 'done') continue;
 
@@ -216,15 +238,26 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 className="panel-title" style={{ margin: 0 }}>시각 자료 생성 & 합성</h2>
         {!isAllCompleted && (
-          <button
-            className="btn-primary"
-            onClick={generateImages}
-            disabled={isGenerating}
-            style={{ opacity: isGenerating ? 0.7 : 1 }}
-          >
-            {isGenerating ? <RotateCw className="animate-spin" size={18} /> : <ImageIcon size={18} />}
-            {isGenerating ? '이미지 생성 중...' : errorCount > 0 ? '실패 항목 재시도' : '전체 이미지 생성'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {isGenerating && (
+              <button
+                className="btn-secondary"
+                onClick={stopGeneration}
+                style={{ color: '#dc2626', borderColor: '#dc2626' }}
+              >
+                <StopCircle size={18} /> 중지
+              </button>
+            )}
+            <button
+              className="btn-primary"
+              onClick={generateImages}
+              disabled={isGenerating}
+              style={{ opacity: isGenerating ? 0.7 : 1 }}
+            >
+              {isGenerating ? <RotateCw className="animate-spin" size={18} /> : <ImageIcon size={18} />}
+              {isGenerating ? '이미지 생성 중...' : errorCount > 0 ? '실패 항목 재시도' : '전체 이미지 생성'}
+            </button>
+          </div>
         )}
       </div>
 
