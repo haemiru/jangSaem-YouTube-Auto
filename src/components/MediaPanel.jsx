@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Image as ImageIcon, RotateCw, Edit3, Settings2, ArrowRight, ArrowUp, ArrowDown, Type, AlertCircle, StopCircle } from 'lucide-react';
+import { Image as ImageIcon, RotateCw, Edit3, Settings2, ArrowRight, ArrowUp, ArrowDown, Type, AlertCircle, StopCircle, X, ZoomIn } from 'lucide-react';
 
 const COMMON_SUFFIX = ", Korean subjects, warm and professional style, clean background, high quality, bright lighting, suitable for educational YouTube content";
 
@@ -67,6 +67,9 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState('');
   const stopRef = useRef(false);
+
+  // Image preview modal
+  const [previewItem, setPreviewItem] = useState(null);
 
   // Thumbnail overlay settings
   const [thumbSettings, setThumbSettings] = useState({
@@ -296,7 +299,14 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
             {queue.filter(item => item.status === 'done' || item.status === 'error').map(item => (
               <div key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
                 {item.status === 'done' ? (
-                  <div style={{ height: '120px', backgroundImage: `url(${item.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                  <div
+                    onClick={() => setPreviewItem(item)}
+                    style={{ height: '120px', backgroundImage: `url(${item.url})`, backgroundSize: 'cover', backgroundPosition: 'center', cursor: 'pointer', position: 'relative' }}
+                  >
+                    <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '50%', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ZoomIn size={14} color="white" />
+                    </div>
+                  </div>
                 ) : (
                   <div style={{ height: '120px', backgroundColor: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', fontSize: '0.75rem', padding: '0.5rem', textAlign: 'center' }}>
                     {item.error || '생성 실패'}
@@ -449,6 +459,43 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
             </div>
           )}
         </>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewItem && (
+        <div
+          onClick={() => setPreviewItem(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          <button
+            onClick={() => setPreviewItem(null)}
+            style={{
+              position: 'absolute', top: '1rem', right: '1rem',
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%',
+              padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <X size={24} color="white" />
+          </button>
+          <div style={{ color: 'white', fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+            {previewItem.label}
+          </div>
+          <img
+            src={previewItem.url}
+            alt={previewItem.label}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw', maxHeight: '80vh',
+              objectFit: 'contain', borderRadius: '8px',
+              cursor: 'default'
+            }}
+          />
+        </div>
       )}
     </div>
   );
