@@ -258,7 +258,7 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
               style={{ opacity: isGenerating ? 0.7 : 1 }}
             >
               {isGenerating ? <RotateCw className="animate-spin" size={18} /> : <ImageIcon size={18} />}
-              {isGenerating ? '이미지 생성 중...' : errorCount > 0 ? '실패 항목 재시도' : '전체 이미지 생성'}
+              {isGenerating ? '이미지 생성 중...' : completedCount > 0 ? '이미지 이어서 생성' : '전체 이미지 생성'}
             </button>
           </div>
         )}
