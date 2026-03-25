@@ -197,40 +197,28 @@ JSON만 출력.`;
       setCurrentStep(3);
       setStreamText(prev => prev + '\n\n=== [3/3] 제목 및 썸네일 기획 중 ===\n\n');
 
-      const titlePrompt = `완성된 대본을 바탕으로 제목 후보와 썸네일 문구를 만들어줘.
+      const isShorts = plan.format === '쇼츠 60초';
+      const titlePrompt = `완성된 대본을 바탕으로 제목 후보${isShorts ? '' : '와 썸네일 문구'}를 만들어줘.
 
 [대본 요약] ${(sectionResult.sections || []).map(s => s.key_message).join(', ')}
 [벤치마킹 제목 공식] ${JSON.stringify(benchmark?.titleFormulas?.formulas || [])}
 [핵심 태그] ${(benchmark?.tagPool || []).slice(0, 10).join(', ')}
+[포맷] ${plan.format}
 
-바로 생성하지 말고 먼저 생각해:
-
-<thinking>
-1. 이 대본의 핵심 가치 제안 한 줄 요약
-2. 시청자가 클릭할 가장 강한 이유
-3. 벤치마킹 공식 중 이 대본에 가장 적합한 패턴 선택 + 근거
-4. 제목 후보 3개 (각기 다른 패턴)
-5. 썸네일 문구 후보 5개 (5글자 이내 우선)
-6. 각 후보 채점:
-   제목: 앞30자 키워드/25 + 감정트리거/25 + 패턴부합/20 + 브랜드톤/15 + 시청자언어/15
-   썸네일: 모바일가독성/20 + 감정트리거/25 + 타겟명확성/20 + 패턴부합/20 + 브랜드톤/15
-7. 최종 추천 1개씩 선정 + 개선
-</thinking>
-
-JSON 출력:
+아래 JSON 형식으로만 바로 출력해. thinking 태그 쓰지 마.
 {
-  "title_cot_log": "제목 관련 사고 과정 요약",
+  "title_cot_log": "제목 선정 근거 2~3문장",
   "title_candidates": [
     { "text": "제목", "score": 90, "reason": "한줄평" }
   ],
-  "final_title": "최종 추천 제목",
-  "thumbnail_cot_log": "썸네일 관련 사고 과정 요약",
+  "final_title": "최종 추천 제목"${isShorts ? '' : `,
+  "thumbnail_cot_log": "썸네일 선정 근거 2~3문장",
   "thumbnail_candidates": [
     { "text": "문구", "score": 90, "reason": "한줄평" }
   ],
-  "final_thumbnail_copy": "최종 추천 썸네일 문구"
+  "final_thumbnail_copy": "최종 추천 썸네일 문구"`}
 }
-JSON만 출력.`;
+JSON만 출력. 다른 텍스트 절대 금지.`;
 
       chatHistory.push({ role: "user", content: titlePrompt });
       const titleResponseText = await runClaudeStream(chatHistory, plan.model, null, (chunk) => {
@@ -492,7 +480,7 @@ JSON만 출력.`;
 
 // Stream fetching handler matching Anthropic Docs
 async function runClaudeStream(messages, model, _apiKey, onChunk) {
-  const systemPrompt = `당신은 jjangsaem.com의 유튜브 콘텐츠 전문가입니다. 피지오 후각 연구소 소속으로 발달장애 아동 및 가족을 위한 뇌과학 근거 중심의 전문적이고 따뜻한 어조로 작성합니다. 항상 JSON 형식으로 응답할 수 있도록 노력합니다. (<thinking> 태그는 허용)`;
+  const systemPrompt = `당신은 jjangsaem.com의 유튜브 콘텐츠 전문가입니다. 피지오 후각 연구소 소속으로 발달장애 아동 및 가족을 위한 뇌과학 근거 중심의 전문적이고 따뜻한 어조로 작성합니다. 반드시 유효한 JSON 형식으로만 응답하세요. JSON 외의 텍스트를 출력하지 마세요.`;
 
   const response = await fetch('/api/anthropic/v1/messages', {
     method: 'POST',
@@ -502,7 +490,7 @@ async function runClaudeStream(messages, model, _apiKey, onChunk) {
     },
     body: JSON.stringify({
       model: model || "claude-haiku-4-5-20251001",
-      max_tokens: 4000,
+      max_tokens: 8000,
       stream: true,
       system: systemPrompt,
       messages: messages

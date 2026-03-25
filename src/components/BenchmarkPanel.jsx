@@ -29,19 +29,22 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
       // 2. Collect Channels
       const { channels, popularVideos, allTags } = await collectChannels(keywords);
 
-      setProgress({ step: 3, text: '🖼️ 썸네일 패턴 분석 중...', error: '' });
+      // 3. Analyze Thumbnails (skip for Shorts)
+      const isShorts = plan.format === '쇼츠 60초';
+      let thumbnailPatterns = null;
+      if (!isShorts) {
+        setProgress({ step: 3, text: '🖼️ 썸네일 패턴 분석 중...', error: '' });
+        const thumbnails = popularVideos.map(v => v.thumbnail).slice(0, 10); // Max 10
+        thumbnailPatterns = await analyzeThumbnails(thumbnails);
+      }
 
-      // 3. Analyze Thumbnails
-      const thumbnails = popularVideos.map(v => v.thumbnail).slice(0, 10); // Max 10
-      const thumbnailPatterns = await analyzeThumbnails(thumbnails);
-
-      setProgress({ step: 4, text: '📊 제목 공식 추출 중...', error: '' });
+      setProgress({ step: isShorts ? 3 : 4, text: '📊 제목 공식 추출 중...', error: '' });
 
       // 4. Analyze Titles
       const titles = popularVideos.map(v => v.title).slice(0, 20);
       const titleFormulas = await analyzeTitles(titles);
 
-      setProgress({ step: 5, text: '✅ 벤치마킹 완료', error: '' });
+      setProgress({ step: isShorts ? 4 : 5, text: '✅ 벤치마킹 완료', error: '' });
 
       // 5. Build Tag Pool
       const tagFreq = {};
@@ -98,7 +101,7 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
           </div>
           {isProcessing && (
             <div style={{ marginTop: '1rem', height: '8px', backgroundColor: 'var(--gray-300)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{ width: `${(progress.step / 5) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s' }} />
+              <div style={{ width: `${(progress.step / (plan.format === '쇼츠 60초' ? 4 : 5)) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s' }} />
             </div>
           )}
         </div>
@@ -114,8 +117,9 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
 
       {hasResults && !isProcessing && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-            {/* Thumbnail Pattern Card */}
+          <div style={{ display: 'grid', gridTemplateColumns: plan.format === '쇼츠 60초' ? '1fr' : '1fr 1fr', gap: '1.5rem' }}>
+            {/* Thumbnail Pattern Card (숏츠가 아닐 때만 표시) */}
+            {plan.format !== '쇼츠 60초' && (
             <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }}>
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.125rem', marginBottom: '1rem' }}>
                 <ImageIcon size={20} color="var(--primary)"/> 썸네일 패턴 카드
@@ -126,9 +130,9 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
                     <strong>주요 색상: </strong>
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                       {benchmark.thumbnailPatterns.dominantColors?.map((c, idx) => (
-                        <div key={idx} style={{ 
+                        <div key={idx} style={{
                           width: '24px', height: '24px', borderRadius: '50%', backgroundColor: c, border: '1px solid #ddd',
-                          display: 'inline-block' 
+                          display: 'inline-block'
                         }} title={c}/>
                       ))}
                     </div>
@@ -140,6 +144,7 @@ export default function BenchmarkPanel({ globalState, updateState, onNext }) {
                 </div>
               ) : <p>데이터 없음</p>}
             </div>
+            )}
 
             {/* Title Formula Card */}
             <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }}>
