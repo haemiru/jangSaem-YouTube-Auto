@@ -414,8 +414,24 @@ export class VideoGenerator {
   }
 
   buildSectionData() {
+    // Build ordered TTS queue (excluding thumbnails)
+    const ttsQueue = [...this.ttsAudios];
+    let ttsIdx = 0;
+
     return this.timeline.map(item => {
-      const tts = this.ttsAudios.find(a => a.id === item.id);
+      // Try exact ID match first
+      let tts = this.ttsAudios.find(a => a.id === item.id);
+
+      // If no exact match, assign next TTS in sequence (handles ID mismatch from skipped sections)
+      if (!tts && ttsIdx < ttsQueue.length && !item.id.startsWith('thumb_')) {
+        tts = ttsQueue[ttsIdx];
+        ttsIdx++;
+      } else if (tts) {
+        // Advance ttsIdx past this matched item
+        const matchedQueueIdx = ttsQueue.indexOf(tts);
+        if (matchedQueueIdx >= ttsIdx) ttsIdx = matchedQueueIdx + 1;
+      }
+
       const durationSec = tts ? tts.duration : item.duration;
       return {
         id: item.id,
@@ -475,7 +491,25 @@ export class VideoGenerator {
 function distributeTime(chunks, totalFrames) {
   if (chunks.length === 0) return [];
   const totalChars = chunks.reduce((sum, c) => sum + c.length, 0);
-  return chunks.map(c => Math.round((c.length / totalChars) * totalFrames));
+  if (totalChars === 0) return chunks.map(() => Math.round(totalFrames / chunks.length));
+
+  // Distribute proportionally, then fix rounding errors
+  const rawDurations = chunks.map(c => (c.length / totalChars) * totalFrames);
+
+  // Ensure minimum display time per chunk (at least 0.5 seconds worth of frames)
+  const minFrames = Math.max(1, Math.round(totalFrames / chunks.length * 0.3));
+  const durations = rawDurations.map(d => Math.max(minFrames, Math.round(d)));
+
+  // Adjust to match total exactly
+  const sum = durations.reduce((a, b) => a + b, 0);
+  if (sum !== totalFrames && durations.length > 0) {
+    const diff = totalFrames - sum;
+    // Add/subtract from longest chunk
+    const longestIdx = durations.indexOf(Math.max(...durations));
+    durations[longestIdx] += diff;
+  }
+
+  return durations;
 }
 
 function getActiveChunk(chunks, durations, currentFrame) {
