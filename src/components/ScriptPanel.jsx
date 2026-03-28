@@ -290,6 +290,22 @@ JSON만 출력. 다른 텍스트 절대 금지.`;
     updateState('metadata', { ...globalState.metadata, title: titleText });
   };
 
+  const updateHook = (text) => {
+    updateState('script', { ...globalScript, hook: text });
+  };
+
+  const updateBridge = (text) => {
+    updateState('script', { ...globalScript, bridge: text });
+  };
+
+  const updateCtaText = (text) => {
+    updateState('script', { ...globalScript, cta: { ...globalScript.cta, text } });
+  };
+
+  const updateCtaEbook = (text) => {
+    updateState('script', { ...globalScript, cta: { ...globalScript.cta, ebook_mention: text } });
+  };
+
   const selectThumbnail = (thumbText) => {
     updateState('script', { ...globalScript, final_thumbnail_copy: thumbText });
     updateState('media', { ...globalState.media, selectedThumbnailCopy: thumbText });
@@ -345,10 +361,23 @@ JSON만 출력. 다른 텍스트 절대 금지.`;
         <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           🎣 시선을 끄는 훅 (Hook)
         </h3>
-        <p style={{ fontSize: '1.125rem', fontWeight: 600, padding: '1rem', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)' }}>
-          "{globalScript.hook}"
-        </p>
-        {globalScript.bridge && <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>브릿지: {globalScript.bridge}</p>}
+        <textarea
+          className="form-control"
+          style={{ fontSize: '1.125rem', fontWeight: 600, minHeight: '80px', lineHeight: '1.6', backgroundColor: 'var(--surface)' }}
+          value={globalScript.hook}
+          onChange={(e) => updateHook(e.target.value)}
+        />
+        {globalScript.bridge !== undefined && (
+          <div style={{ marginTop: '1rem' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem', display: 'block' }}>브릿지</label>
+            <textarea
+              className="form-control"
+              style={{ minHeight: '60px', lineHeight: '1.6', fontSize: '0.9375rem' }}
+              value={globalScript.bridge || ''}
+              onChange={(e) => updateBridge(e.target.value)}
+            />
+          </div>
+        )}
         
         <div style={{ marginTop: '1rem' }}>
           <button onClick={() => setShowHookCot(!showHookCot)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -438,8 +467,22 @@ JSON만 출력. 다른 텍스트 절대 금지.`;
         {globalScript.cta && (
           <div style={{ border: '1px dashed var(--primary)', borderRadius: 'var(--radius-md)', padding: '1.5rem', backgroundColor: 'var(--secondary)' }}>
             <h4 style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--primary)' }}>CTA 및 아웃트로</h4>
-            <p style={{ whiteSpace: 'pre-wrap', marginBottom: '0.5rem' }}>{globalScript.cta.text}</p>
-            <p style={{ fontSize: '0.875rem', color: 'var(--primary)' }}>📢 전자책 연계: {globalScript.cta.ebook_mention}</p>
+            <textarea
+              className="form-control"
+              style={{ minHeight: '100px', lineHeight: '1.6', marginBottom: '0.75rem' }}
+              value={globalScript.cta.text}
+              onChange={(e) => updateCtaText(e.target.value)}
+            />
+            <div>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', marginBottom: '0.25rem', display: 'block' }}>📢 전자책 연계</label>
+              <input
+                type="text"
+                className="form-control"
+                style={{ fontSize: '0.875rem' }}
+                value={globalScript.cta.ebook_mention || ''}
+                onChange={(e) => updateCtaEbook(e.target.value)}
+              />
+            </div>
           </div>
         )}
       </div>

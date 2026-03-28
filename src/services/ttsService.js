@@ -46,14 +46,20 @@ export async function synthesizeAllSections(script, { tone = '따뜻한', onProg
   const items = [];
 
   const textParts = [];
-  if (script.hook) {
-    textParts.push({
-      id: 'intro',
-      text: script.hook + (script.bridge ? ' ' + script.bridge : '')
-    });
+  const introText = script.hook
+    ? script.hook + (script.bridge ? ' ' + script.bridge : '')
+    : '';
+  if (introText) {
+    textParts.push({ id: 'intro', text: introText });
   }
   if (script.sections) {
     script.sections.forEach((sec, idx) => {
+      // Skip section if it duplicates the intro (hook + bridge)
+      const secText = (sec.script || '').replace(/\s+/g, '');
+      const introNorm = introText.replace(/\s+/g, '');
+      if (introNorm && (secText === introNorm || introNorm.includes(secText) || secText.includes(introNorm))) {
+        return;
+      }
       textParts.push({ id: `section_${idx}`, text: sec.script });
     });
   }
