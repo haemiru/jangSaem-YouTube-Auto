@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, RotateCw, Edit3, Settings2, ArrowRight, ArrowUp, ArrowDown, Type, AlertCircle, StopCircle, X, ZoomIn, Upload, Film, Download, Loader2, Play, Save, ChevronDown, ChevronUp } from 'lucide-react';
-import { synthesizeAllSections, TONE_OPTIONS } from '../services/ttsService';
+import { synthesizeAllSections, TONE_OPTIONS, VOICE_OPTIONS } from '../services/ttsService';
 import { VideoGenerator } from '../services/videoGenerator';
 
 const COMMON_SUFFIX = ", Korean subjects, warm and professional style, clean background, high quality, bright lighting, suitable for educational YouTube content";
@@ -8,17 +8,36 @@ const COMMON_SUFFIX = ", Korean subjects, warm and professional style, clean bac
 const GEMINI_MODEL = 'gemini-3-pro-image-preview';
 const DELAY_BETWEEN_REQUESTS_MS = 3000;
 
-async function generateImageWithGemini(prompt, retries = 3) {
+async function generateImageWithGemini(prompt, referenceImage = null, retries = 3) {
   // Routed through server-side proxy — API key injected by proxy
   const url = `/api/gemini/models/${GEMINI_MODEL}:generateContent`;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
+      // Build parts: text prompt + optional reference image
+      const reqParts = [];
+      if (referenceImage) {
+        // Extract base64 and mimeType from data URL
+        const match = referenceImage.match(/^data:(image\/\w+);base64,(.+)$/);
+        if (match) {
+          reqParts.push({
+            text: `Use the character in the reference image below as the main character. Maintain the character's appearance, style, and features consistently.\n\n${prompt}`
+          });
+          reqParts.push({
+            inlineData: { mimeType: match[1], data: match[2] }
+          });
+        } else {
+          reqParts.push({ text: prompt });
+        }
+      } else {
+        reqParts.push({ text: prompt });
+      }
+
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts: reqParts }],
           generationConfig: {
             responseModalities: ['IMAGE', 'TEXT'],
             thinkingConfig: {
@@ -93,6 +112,7 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoQuality, setVideoQuality] = useState('fast');
   const [ttsTone, setTtsTone] = useState('따뜻한');
+  const [ttsVoice, setTtsVoice] = useState('Kore');
   const [videoError, setVideoError] = useState('');
   const videoGenRef = useRef(null);
 
@@ -109,6 +129,9 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
 
   // Prompt editing for image cards
   const [editingPromptId, setEditingPromptId] = useState(null);
+
+  // Character reference image
+  const [characterRef, setCharacterRef] = useState(null); // data URL
 
   // Initialize queue
   useEffect(() => {
@@ -169,7 +192,7 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
       setQueue([...newQueue]);
 
       try {
-        const dataUrl = await generateImageWithGemini(newQueue[i].prompt);
+        const dataUrl = await generateImageWithGemini(newQueue[i].prompt, characterRef);
         newQueue[i].url = dataUrl;
         newQueue[i].status = 'done';
       } catch (err) {
@@ -220,7 +243,7 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
     setQueue([...newQueue]);
 
     try {
-      const dataUrl = await generateImageWithGemini(newQueue[idx].prompt);
+      const dataUrl = await generateImageWithGemini(newQueue[idx].prompt, characterRef);
       newQueue[idx].url = dataUrl;
       newQueue[idx].status = 'done';
     } catch (err) {
@@ -281,15 +304,12 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
     try {
       // 1. TTS — resume from cached audios if available
       let ttsAudios;
+      const ttsOpts = { tone: ttsTone, voiceName: ttsVoice, onProgress: setVideoProgress };
       if (cachedTtsAudios.length > 0) {
         setVideoProgress({ step: 'tts', label: `이전 음성 ${cachedTtsAudios.length}개 재사용, 나머지 생성 중...` });
-        ttsAudios = await synthesizeAllSections(script, {
-          tone: ttsTone,
-          onProgress: setVideoProgress,
-          cachedAudios: cachedTtsAudios,
-        });
+        ttsAudios = await synthesizeAllSections(script, { ...ttsOpts, cachedAudios: cachedTtsAudios });
       } else {
-        ttsAudios = await synthesizeAllSections(script, { tone: ttsTone, onProgress: setVideoProgress });
+        ttsAudios = await synthesizeAllSections(script, ttsOpts);
       }
       setCachedTtsAudios(ttsAudios);
 
@@ -481,6 +501,39 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
           <AlertCircle size={16} /> {genError}
         </div>
       )}
+
+      {/* 0. Character Reference */}
+      <div style={{ padding: '1rem 1.5rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', backgroundColor: characterRef ? '#f0fdf4' : 'var(--surface)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.25rem' }}>캐릭터 레퍼런스 (선택사항)</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              {characterRef ? '캐릭터 이미지가 설정되었습니다. 모든 이미지 생성에 반영됩니다.' : '캐릭터 이미지를 업로드하면 해당 캐릭터 스타일로 이미지가 생성됩니다.'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {characterRef && (
+              <>
+                <img src={characterRef} alt="캐릭터" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '2px solid var(--primary)' }} />
+                <button className="btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setCharacterRef(null)}>
+                  <X size={14} /> 제거
+                </button>
+              </>
+            )}
+            <label className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+              <Upload size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+              {characterRef ? '변경' : '업로드'}
+              <input type="file" accept="image/*" hidden onChange={(e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => setCharacterRef(ev.target.result);
+                reader.readAsDataURL(file);
+              }} />
+            </label>
+          </div>
+        </div>
+      </div>
 
       {/* 1. Generation Grid View */}
       <div style={{ padding: '1.5rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
@@ -739,6 +792,14 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
 
               {!videoProgress && !videoUrl && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '0.875rem' }}>음성 선택</label>
+                    <select className="form-control" value={ttsVoice} onChange={e => setTtsVoice(e.target.value)} style={{ marginBottom: '0.5rem' }}>
+                      {VOICE_OPTIONS.map(v => (
+                        <option key={v.id} value={v.id}>{v.label}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="form-label" style={{ fontSize: '0.875rem' }}>음성 톤 선택</label>
                     <div className="radio-group" style={{ gap: '0.5rem' }}>

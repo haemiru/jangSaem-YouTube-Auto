@@ -1,13 +1,11 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const VOICE_NAME = 'Kore'; // 한국어 여성 자연스러운 목소리
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { text, stylePrompt } = req.body;
+  const { text, stylePrompt, speedRate, voiceName } = req.body;
 
   if (!text) {
     return res.status(400).json({ error: 'text is required' });
@@ -20,8 +18,10 @@ export default async function handler(req, res) {
       '따뜻하고 친근한 목소리로, 육아에 지친 부모님께 말하듯 천천히 또렷하게 읽어주세요.';
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-preview-tts',
+      model: 'gemini-2.5-pro-preview-tts',
     });
+
+    const selectedVoice = voiceName || 'Kore';
 
     const result = await model.generateContent({
       contents: [{
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
         responseModalities: ['AUDIO'],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: VOICE_NAME }
+            prebuiltVoiceConfig: { voiceName: selectedVoice }
           }
         }
       }
@@ -41,7 +41,8 @@ export default async function handler(req, res) {
     const audioData = result.response.candidates[0]
       .content.parts[0].inlineData.data; // base64 PCM
 
-    const wavBase64 = pcmToWav(audioData);
+    const rate = Math.max(0.5, Math.min(3.0, parseFloat(speedRate) || 1.0));
+    const wavBase64 = pcmToWav(audioData, rate);
 
     res.status(200).json({ audioContent: wavBase64, encoding: 'WAV' });
 
@@ -51,11 +52,12 @@ export default async function handler(req, res) {
   }
 }
 
-// PCM 16bit 24kHz → WAV 변환
-function pcmToWav(base64Pcm) {
+// PCM 16bit 24kHz → WAV 변환 (speedRate로 재생 속도 조절)
+function pcmToWav(base64Pcm, speedRate = 1.0) {
   const pcmBuffer = Buffer.from(base64Pcm, 'base64');
 
-  const sampleRate = 24000;
+  // 샘플레이트를 높이면 같은 데이터가 빠르게 재생됨 (피치도 살짝 올라감)
+  const sampleRate = Math.round(24000 * speedRate);
   const numChannels = 1;
   const bitsPerSample = 16;
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);

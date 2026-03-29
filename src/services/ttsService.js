@@ -7,15 +7,31 @@ const STYLE_PROMPTS = {
 
 export const TONE_OPTIONS = Object.keys(STYLE_PROMPTS);
 
+// Gemini TTS 음성 목록
+export const VOICE_OPTIONS = [
+  { id: 'Kore', label: 'Kore (여성, 차분)', gender: '여성' },
+  { id: 'Aoede', label: 'Aoede (여성, 밝은)', gender: '여성' },
+  { id: 'Leda', label: 'Leda (여성, 부드러운)', gender: '여성' },
+  { id: 'Zephyr', label: 'Zephyr (여성, 경쾌한)', gender: '여성' },
+  { id: 'Charon', label: 'Charon (남성, 깊은)', gender: '남성' },
+  { id: 'Fenrir', label: 'Fenrir (남성, 힘있는)', gender: '남성' },
+  { id: 'Puck', label: 'Puck (남성, 친근한)', gender: '남성' },
+  { id: 'Orus', label: 'Orus (남성, 안정적)', gender: '남성' },
+];
+
 const DELAY_BETWEEN_CALLS = 800;
 
-export async function synthesizeSpeech(text, tone = '따뜻한') {
+export const DEFAULT_SPEED_RATE = 1.5;
+
+export async function synthesizeSpeech(text, tone = '따뜻한', speedRate = DEFAULT_SPEED_RATE, voiceName = 'Kore') {
   const res = await fetch('/api/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       text,
-      stylePrompt: STYLE_PROMPTS[tone] || STYLE_PROMPTS['따뜻한']
+      voiceName,
+      stylePrompt: STYLE_PROMPTS[tone] || STYLE_PROMPTS['따뜻한'],
+      speedRate
     })
   });
 
@@ -42,7 +58,7 @@ export async function getAudioDuration(base64Audio) {
   }
 }
 
-export async function synthesizeAllSections(script, { tone = '따뜻한', onProgress, cachedAudios = [] } = {}) {
+export async function synthesizeAllSections(script, { tone = '따뜻한', speedRate = DEFAULT_SPEED_RATE, voiceName = 'Kore', onProgress, cachedAudios = [] } = {}) {
   const items = [];
 
   const textParts = [];
@@ -90,7 +106,7 @@ export async function synthesizeAllSections(script, { tone = '따뜻한', onProg
       label: `음성 생성 중... (${i + 1}/${textParts.length})`
     });
 
-    const audioBase64 = await synthesizeSpeech(text, tone);
+    const audioBase64 = await synthesizeSpeech(text, tone, speedRate, voiceName);
     const duration = await getAudioDuration(audioBase64);
 
     items.push({ id, audioBase64, duration, text });
