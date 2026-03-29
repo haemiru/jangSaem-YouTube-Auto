@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, RotateCw, Edit3, Settings2, ArrowRight, ArrowUp, ArrowDown, Type, AlertCircle, StopCircle, X, ZoomIn, Upload, Film, Download, Loader2, Play, Save, ChevronDown, ChevronUp } from 'lucide-react';
-import { synthesizeAllSections, TONE_OPTIONS, VOICE_OPTIONS } from '../services/ttsService';
+import { synthesizeAllSections, STYLE_PROMPTS, TONE_OPTIONS, VOICE_OPTIONS, SPEED_OPTIONS, DEFAULT_SPEED_RATE } from '../services/ttsService';
 import { VideoGenerator } from '../services/videoGenerator';
 
 const COMMON_SUFFIX = ", Korean subjects, warm and professional style, clean background, high quality, bright lighting, suitable for educational YouTube content";
@@ -111,8 +111,10 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
   const [videoBlob, setVideoBlob] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoQuality, setVideoQuality] = useState('fast');
-  const [ttsTone, setTtsTone] = useState('따뜻한');
+  const [ttsTone, setTtsTone] = useState(plan?.tone || '따뜻한');
+  const [ttsStyleId, setTtsStyleId] = useState(STYLE_PROMPTS[plan?.tone || '따뜻한']?.[0]?.id || 'warm_1');
   const [ttsVoice, setTtsVoice] = useState('Kore');
+  const [ttsSpeed, setTtsSpeed] = useState(DEFAULT_SPEED_RATE);
   const [videoError, setVideoError] = useState('');
   const videoGenRef = useRef(null);
 
@@ -304,7 +306,13 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
     try {
       // 1. TTS — resume from cached audios if available
       let ttsAudios;
-      const ttsOpts = { tone: ttsTone, voiceName: ttsVoice, onProgress: setVideoProgress };
+      const selectedStyle = STYLE_PROMPTS[ttsTone]?.find(s => s.id === ttsStyleId);
+      const ttsOpts = {
+        stylePrompt: selectedStyle?.prompt || STYLE_PROMPTS['따뜻한'][0].prompt,
+        speedRate: ttsSpeed,
+        voiceName: ttsVoice,
+        onProgress: setVideoProgress,
+      };
       if (cachedTtsAudios.length > 0) {
         setVideoProgress({ step: 'tts', label: `이전 음성 ${cachedTtsAudios.length}개 재사용, 나머지 생성 중...` });
         ttsAudios = await synthesizeAllSections(script, { ...ttsOpts, cachedAudios: cachedTtsAudios });
@@ -794,19 +802,35 @@ export default function MediaPanel({ globalState, updateState, onNext }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label className="form-label" style={{ fontSize: '0.875rem' }}>음성 선택</label>
-                    <select className="form-control" value={ttsVoice} onChange={e => setTtsVoice(e.target.value)} style={{ marginBottom: '0.5rem' }}>
+                    <select className="form-control" value={ttsVoice} onChange={e => setTtsVoice(e.target.value)}>
                       {VOICE_OPTIONS.map(v => (
                         <option key={v.id} value={v.id}>{v.label}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="form-label" style={{ fontSize: '0.875rem' }}>음성 톤 선택</label>
-                    <div className="radio-group" style={{ gap: '0.5rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.875rem' }}>톤앤매너</label>
+                    <div className="radio-group" style={{ gap: '0.5rem', marginBottom: '0.5rem' }}>
                       {TONE_OPTIONS.map(tone => (
                         <label key={tone} className={`radio-label ${ttsTone === tone ? 'selected' : ''}`} style={{ flex: 1, justifyContent: 'center' }}>
-                          <input type="radio" className="radio-input" checked={ttsTone === tone} onChange={() => setTtsTone(tone)} />
+                          <input type="radio" className="radio-input" checked={ttsTone === tone} onChange={() => { setTtsTone(tone); setTtsStyleId(STYLE_PROMPTS[tone][0].id); }} />
                           {tone}
+                        </label>
+                      ))}
+                    </div>
+                    <select className="form-control" value={ttsStyleId} onChange={e => setTtsStyleId(e.target.value)} style={{ fontSize: '0.85rem' }}>
+                      {STYLE_PROMPTS[ttsTone]?.map(s => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '0.875rem' }}>읽기 속도</label>
+                    <div className="radio-group" style={{ gap: '0.5rem' }}>
+                      {SPEED_OPTIONS.map(s => (
+                        <label key={s.id} className={`radio-label ${ttsSpeed === s.id ? 'selected' : ''}`} style={{ flex: 1, justifyContent: 'center', fontSize: '0.8rem' }}>
+                          <input type="radio" className="radio-input" checked={ttsSpeed === s.id} onChange={() => setTtsSpeed(s.id)} />
+                          {s.label}
                         </label>
                       ))}
                     </div>
